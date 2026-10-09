@@ -1,9 +1,33 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from time import time
 import requests
 
 BASE = "https://api-web.nhle.com/v1"
 _cache = {}
+
+def format_start(value):
+    if not value:
+        return "Time TBD"
+    try:
+        from zoneinfo import ZoneInfo
+        local = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
+        return local.strftime("%I:%M %p").lstrip("0") + " ET"
+    except Exception:
+        return value
+
+
+def localized(value):
+    return value.get("default", "") if isinstance(value, dict) else (value or "")
+
+
+def player_photo(player, team, season):
+    if player.get("headshot"):
+        return player["headshot"]
+    pid = player.get("playerId") or player.get("id")
+    if not pid:
+        return None
+    return f"https://assets.nhle.com/mugs/nhl/{season}/{team}/{pid}.png"
+
 
 def get_games(day: str | None = None):
     day = day or date.today().isoformat()
@@ -21,6 +45,7 @@ def get_games(day: str | None = None):
         games.append({
             "id": game.get("id"),
             "start_time_utc": game.get("startTimeUTC"),
+            "time_label": format_start(game.get("startTimeUTC")),
             "state": game.get("gameState", "UNKNOWN"),
             "venue": (game.get("venue") or {}).get("default", ""),
             "away": {"abbr": away.get("abbrev", "???"), "name": (away.get("name") or {}).get("default", away.get("abbrev", "Away")), "score": away.get("score"), "logo": away.get("logo")},
@@ -52,6 +77,8 @@ def get_matchup(game_id: int, day: str):
     standings = fetch_json(f"standings/{day}", 1800).get('standings', [])
     standings_by_team = {row.get('teamAbbrev', {}).get('default'): row for row in standings}
     teams = {}
+    season_start = int(day[:4]) if int(day[5:7]) >= 7 else int(day[:4]) - 1
+    season = f"{season_start}{season_start+1}"
     for side in ('away', 'home'):
         abbr = game[side]['abbr']
         row = standings_by_team.get(abbr, {})
@@ -87,7 +114,8 @@ def get_matchup(game_id: int, day: str):
             'penalty_kill_pct': round(row['penaltyKillPct'] * 100, 1) if row.get('penaltyKillPct') is not None else None,
             'recent': previous,
             'recent_record': f"{sum(g['result'] == 'W' for g in previous)}-{sum(g['result'] == 'L' for g in previous)}" if previous else '—',
-            'goalies': sorted([{'name': f"{x.get('firstName', {}).get('default', '')} {x.get('lastName', {}).get('default', '')}".strip(), 'games': x.get('gamesPlayed'), 'save_pct': x.get('savePct'), 'gaa': x.get('goalsAgainstAverage')} for x in club.get('goalies', [])], key=lambda x: x['games'] or 0, reverse=True)[:3],
+            'goalies': sorted([{'name': f"{localized(x.get('firstName'))} {localized(x.get('lastName'))}".strip(), 'games': x.get('gamesPlayed'), 'save_pct': x.get('savePct'), 'gaa': x.get('goalsAgainstAverage'), 'photo': player_photo(x, abbr, season), 'number': x.get('sweaterNumber')} for x in club.get('goalies', [])], key=lambda x: x['games'] or 0, reverse=True)[:3],
+            'skaters': sorted([{'name': f"{localized(x.get('firstName'))} {localized(x.get('lastName'))}".strip(), 'points': x.get('points'), 'goals': x.get('goals'), 'assists': x.get('assists'), 'photo': player_photo(x, abbr, season), 'number': x.get('sweaterNumber'), 'position': x.get('positionCode')} for x in club.get('skaters', [])], key=lambda x: x['points'] or 0, reverse=True)[:5],
         }
     # Historical head-to-head from away team's schedule; results only before selected game.
     try:
@@ -101,4 +129,4 @@ def get_matchup(game_id: int, day: str):
             h2h.append({'date': m.get('gameDate'), 'home': m['homeTeam'].get('abbrev'), 'away': m['awayTeam'].get('abbrev'), 'home_score': m['homeTeam'].get('score'), 'away_score': m['awayTeam'].get('score')})
     except requests.RequestException:
         h2h = []
-    return {'game': game, 'away': teams['away'], 'home': teams['home'], 'h2h': h2h[::-1]}
+    return {'game': game, 'away': teams['away'], 'home': teams['home'], 'h2h': h2h[::-1], 'season': season} 

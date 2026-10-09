@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
@@ -24,7 +24,7 @@ def home(request: Request, day: str | None = None):
     except Exception:
         games = []
         error = "NHL data is temporarily unavailable. Try again shortly."
-    return templates.TemplateResponse("index.html", {"request": request, "games": games, "day": selected, "error": error})
+    return templates.TemplateResponse("index.html", {"request": request, "games": games, "day": selected, "error": error, "date_strip": [{"iso": (date.fromisoformat(selected) + timedelta(days=i)).isoformat(), "weekday": (date.fromisoformat(selected) + timedelta(days=i)).strftime("%a"), "label": (date.fromisoformat(selected) + timedelta(days=i)).strftime("%b %d")} for i in range(-2, 5)]})
 
 @app.get("/api/games")
 def games(day: str | None = None):
