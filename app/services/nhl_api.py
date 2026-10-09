@@ -5,15 +5,53 @@ import requests
 BASE = "https://api-web.nhle.com/v1"
 _cache = {}
 
-def format_start(value):
-    if not value:
-        return "Time TBD"
+def _eastern_datetime(value):
+    """Convert an NHL UTC timestamp to US Eastern, with no tzdata dependency.
+
+    US DST begins at 02:00 local standard time on the second Sunday of March
+    (07:00 UTC), and ends at 02:00 local daylight time on the first Sunday
+    of November (06:00 UTC). NHL dates are after the 2007 rule change.
+    """
+    from datetime import timedelta
+
+    if not isinstance(value, str) or not value.strip():
+        return None
     try:
-        from zoneinfo import ZoneInfo
-        local = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
-        return local.strftime("%I:%M %p").lstrip("0") + " ET"
-    except Exception:
-        return value
+        utc_dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if utc_dt.tzinfo is None:
+            utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+        utc_dt = utc_dt.astimezone(timezone.utc)
+        year = utc_dt.year
+
+        march_first = datetime(year, 3, 1, tzinfo=timezone.utc)
+        first_sunday_march = 1 + (6 - march_first.weekday()) % 7
+        dst_start = datetime(year, 3, first_sunday_march + 7, 7, tzinfo=timezone.utc)
+
+        november_first = datetime(year, 11, 1, tzinfo=timezone.utc)
+        first_sunday_nov = 1 + (6 - november_first.weekday()) % 7
+        dst_end = datetime(year, 11, first_sunday_nov, 6, tzinfo=timezone.utc)
+
+        offset_hours = -4 if dst_start <= utc_dt < dst_end else -5
+        eastern_zone = timezone(timedelta(hours=offset_hours))
+        return utc_dt.astimezone(eastern_zone)
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def format_start(value):
+    """Readable game start time in US Eastern, independent of Windows tzdata."""
+    eastern = _eastern_datetime(value)
+    if eastern is None:
+        return "Time TBD"
+    return eastern.strftime("%I:%M %p").lstrip("0") + " ET"
+
+
+def format_game_date(value):
+    """Readable Eastern calendar date, including games crossing UTC midnight."""
+    eastern = _eastern_datetime(value)
+    if eastern is None:
+        return "Date TBD"
+    return f"{eastern.strftime('%A, %B')} {eastern.day}, {eastern.year}"
 
 
 def localized(value):
@@ -46,6 +84,7 @@ def get_games(day: str | None = None):
             "id": game.get("id"),
             "start_time_utc": game.get("startTimeUTC"),
             "time_label": format_start(game.get("startTimeUTC")),
+            "date_label": format_game_date(game.get("startTimeUTC")),
             "state": game.get("gameState", "UNKNOWN"),
             "venue": (game.get("venue") or {}).get("default", ""),
             "away": {"abbr": away.get("abbrev", "???"), "name": (away.get("name") or {}).get("default", away.get("abbrev", "Away")), "score": away.get("score"), "logo": away.get("logo")},
@@ -129,4 +168,7 @@ def get_matchup(game_id: int, day: str):
             h2h.append({'date': m.get('gameDate'), 'home': m['homeTeam'].get('abbrev'), 'away': m['awayTeam'].get('abbrev'), 'home_score': m['homeTeam'].get('score'), 'away_score': m['awayTeam'].get('score')})
     except requests.RequestException:
         h2h = []
-    return {'game': game, 'away': teams['away'], 'home': teams['home'], 'h2h': h2h[::-1], 'season': season} 
+    from app.services.prediction import predict
+    # Only show pregame estimates for future dates. Historical standings would leak results.
+    prediction = predict(teams['away'], teams['home']) if day >= date.today().isoformat() and game['state'] in ('FUT', 'PRE') else None
+    return {'game': game, 'away': teams['away'], 'home': teams['home'], 'h2h': h2h[::-1], 'season': season, 'prediction': prediction} 

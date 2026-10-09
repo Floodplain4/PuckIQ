@@ -33,3 +33,16 @@ Run locally alongside OpenCase:
 ```bash
 uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
+
+
+### v0.4.1 hotfix
+- Readable Eastern game times and dates (Windows requires `tzdata`; run `pip install -r requirements.txt`).
+- Hockey-goal favicon with cache-busting version.
+- No changes to prediction calculations.
+
+
+## v0.4.2 time display fix
+- Converts NHL UTC start times to US Eastern using built-in Python only.
+- Handles daylight saving time without Windows tzdata.
+- `Time TBD` is shown only for missing or malformed timestamps.
+- Run `python -m unittest discover -s tests -v` to verify date formatting.

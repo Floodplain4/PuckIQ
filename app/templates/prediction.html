@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ away.abbr }} vs {{ home.abbr }} Prediction | PuckIQ{% endblock %}
+{% block content %}
+<a class="back" href="/matchup/{{ game.id }}?day={{ day }}">← Back to matchup</a>
+<section class="prediction-hero"><span class="kicker">PUCKIQ LABS / MATCHUP FORECAST</span><h1>Who has the edge?</h1><p>{{ away.name }} at {{ home.name }} · {{ game.date_label }} · {{ game.time_label }}</p></section>
+<section class="panel"><div class="panel-heading"><div><span class="kicker">EXPERIMENTAL MODEL V0.1</span><h2>Estimated win probability</h2></div>{% if prediction %}<span class="muted">{{ prediction.confidence }}</span>{% endif %}</div>
+{% if prediction and prediction.available %}
+<div class="forecast-score forecast-score-large"><div><img src="{{ away.logo }}" alt="{{ away.name }}"><strong>{{ prediction.away_pct }}%</strong><small>{{ away.name }}</small></div><div class="forecast-divider">VS</div><div><img src="{{ home.logo }}" alt="{{ home.name }}"><strong>{{ prediction.home_pct }}%</strong><small>{{ home.name }}</small></div></div>
+<div class="probability-bar"><span style="width:{{ prediction.away_pct }}%"></span></div>
+<p class="forecast-caption">These estimates represent regulation + overtime/shootout winner probabilities, not a projected score.</p>
+{% else %}<div class="forecast-unavailable"><h3>Forecast unavailable</h3><p>{{ prediction.message if prediction else 'This game is already underway or completed, or the selected date is in the past. We only show forecasts for upcoming games.' }}</p></div>{% endif %}
+</section>
+{% if prediction and prediction.available %}
+<div class="two-col"><section class="panel"><div class="panel-heading"><div><span class="kicker">THE WHY</span><h2>Factors driving the estimate</h2></div></div>{% for reason in prediction.reasons %}<div class="factor-line"><span class="factor-dot">+</span><div><strong>{{ reason.label }}</strong><small>{{ reason.detail }}</small></div><b>{{ reason.team }}</b></div>{% else %}<p class="muted">No factor has a meaningful edge.</p>{% endfor %}</section>
+<section class="panel"><div class="panel-heading"><div><span class="kicker">MODEL TRANSPARENCY</span><h2>How it works</h2></div></div><p class="model-copy">The model combines season results, goal differential, recent form, special teams, and a small home-ice advantage. Early-season statistics are damped toward a neutral estimate.</p><div class="factor-list">{% for component in prediction.components %}<div class="factor-component"><span>{{ component.name }}</span><b>{{ '%+.3f'|format(component.impact) }}</b></div>{% endfor %}</div><p class="hint">Component values are log-odds contributions toward the home team. Positive favors {{ home.abbr }}; negative favors {{ away.abbr }}.</p></section></div>
+{% endif %}
+<section class="panel"><div class="panel-heading"><div><span class="kicker">IMPORTANT CONTEXT</span><h2>What this prediction does not know</h2></div></div><div class="limits-grid"><div><strong>Starting goaltenders</strong><p>Season goalie leaders are not necessarily tonight's starters.</p></div><div><strong>Injuries and lineups</strong><p>Late scratches and lineup changes are not included.</p></div><div><strong>Historical calibration</strong><p>This is a heuristic baseline, not a backtested or trained probability model.</p></div></div></section>
+<p class="disclaimer">For entertainment and learning. Not betting advice. NHL data may be incomplete or delayed.</p>
+{% endblock %}

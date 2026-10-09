@@ -52,3 +52,18 @@ def matchup(request: Request, game_id: int, day: str):
     if data is None:
         raise HTTPException(404, "Game not found on selected date")
     return templates.TemplateResponse("matchup.html", {"request": request, **data, "day": day})
+
+
+@app.get("/prediction/{game_id}", response_class=HTMLResponse)
+def prediction_page(request: Request, game_id: int, day: str):
+    try:
+        date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(400, "Use YYYY-MM-DD for day")
+    try:
+        data = get_matchup(game_id, day)
+    except Exception:
+        raise HTTPException(503, "NHL data is temporarily unavailable. Please try again.")
+    if data is None:
+        raise HTTPException(404, "Game not found on selected date")
+    return templates.TemplateResponse("prediction.html", {"request": request, **data, "day": day})
